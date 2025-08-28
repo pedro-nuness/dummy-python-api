@@ -10,6 +10,16 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from fastapi import Request
 from app.api.endpoints.v1.finance_router import router as finance_router
+from app.core.metrics import PrometheusMiddleware
+from prometheus_client import make_asgi_app
+from app.core.logging import logger
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Aplicação FastAPI iniciada.")
+    yield
+    logger.info("Aplicação FastAPI finalizada.")
 
 app = FastAPI(
     title="Serviço de Integração de APIs",
@@ -22,7 +32,8 @@ app = FastAPI(
     license_info={
         "name": "MIT",
         "url": "https://opensource.org/licenses/MIT"
-    }
+    },
+    lifespan=lifespan
 )
 
 limiter = Limiter(key_func=get_remote_address)
@@ -33,7 +44,12 @@ app.add_exception_handler(ExternalAPIServiceError, external_api_service_exceptio
 app.add_exception_handler(CircuitBreakerError, circuit_breaker_open_exception_handler)
 
 app.include_router(finance_router, prefix="/api/v1")
+app.add_middleware(PrometheusMiddleware)
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 @app.get("/", tags=["Health Check"])
 def read_root():
+    logger.info("Health check solicitado.")
     return {"status": "ok"}

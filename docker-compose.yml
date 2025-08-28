@@ -1,0 +1,64 @@
+services:  # Serviço da API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dummy-api
+    ports:
+      - "8000:8000"
+    environment:
+      - EXTERNAL_API_BASE_URL=https://data-api.coindesk.com
+      - LOG_LEVEL=INFO
+      - CIRCUIT_BREAKER_FAIL_MAX=3
+      - CIRCUIT_BREAKER_RESET_TIMEOUT=30
+    restart: always
+    networks:
+      - monitoring-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: always
+    networks:
+      - monitoring-network
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana:/var/lib/grafana
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+    restart: always
+    networks:
+      - monitoring-network
+    depends_on:
+      - prometheus
+      
+
+networks:
+  monitoring-network:
+    driver: bridge
